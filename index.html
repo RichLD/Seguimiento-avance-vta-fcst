@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avance Vta vs Fcst / Inventario</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231f3864'/><path d='M7 22l6-6 4 4 8-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+:root{
+  --bg:#f4f6fa; --panel:#ffffff; --ink:#1b2333; --muted:#5f6b80; --line:#dfe4ec; --brand:#1f3864; --brand-2:#2f5597;
+  --crit:#c0392b; --crit-bg:#fbe3df; --alert:#9a6b00; --alert-bg:#fff1c7; --over:#1f4e8c; --over-bg:#dde9f7;
+  --ok:#1e7a46; --ok-bg:#dcf2e4; --none:#5b6270; --none-bg:#e9ebef; --focus:#2f5597;
+  font-family: "Segoe UI", Roboto, Arial, sans-serif; color-scheme: light;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:14px}
+header{background:var(--brand);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;font-weight:600}
+header .sub{font-size:12px;opacity:.8}
+header .meta{margin-left:auto;font-size:12px;opacity:.9;text-align:right;overflow-wrap:anywhere;min-width:0}
+nav{background:#fff;border-bottom:1px solid var(--line);display:flex;gap:2px;padding:0 16px;overflow-x:auto;position:sticky;top:0;z-index:5}
+nav button{border:0;background:none;padding:12px 14px;font:inherit;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+nav button.on{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+main{padding:20px 24px;max-width:1700px;margin:0 auto}
+section{display:none} section.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px}
+.card h2{font-size:15px;margin:0 0 12px;color:var(--brand)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kpi .l{font-size:12px;color:var(--muted)} .kpi .v{font-size:22px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi.st{cursor:pointer;border-left:5px solid var(--line)} .kpi.st.sel{outline:2px solid var(--focus)}
+.kpi.CRIT{border-left-color:var(--crit)} .kpi.ALERT{border-left-color:#e0a800} .kpi.OVER{border-left-color:var(--over)} .kpi.OK{border-left-color:var(--ok)} .kpi.NONE{border-left-color:#9aa1ad}
+.warn{background:var(--alert-bg);border:1px solid #f0d27a;color:#6b4e00;border-radius:6px;padding:10px 12px;margin-bottom:12px}
+.info{background:#eef3fb;border:1px solid #cdd9ee;color:#23406e;border-radius:6px;padding:10px 12px;margin-bottom:12px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+input,select,textarea{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
+button.btn{font:inherit;padding:7px 14px;border-radius:6px;border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer}
+button.btn.sec{background:#fff;color:var(--brand)} button.btn.danger{background:#fff;color:var(--crit);border-color:var(--crit)}
+button.btn:disabled{opacity:.5;cursor:default}
+.tablewrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:6px;background:#fff}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{position:sticky;top:0;background:var(--brand);color:#fff;font-weight:600;padding:8px 6px;text-align:center;vertical-align:bottom;z-index:2;cursor:pointer;user-select:none;min-width:70px}
+th.nosort{cursor:default}
+td{padding:5px 6px;border-bottom:1px solid #edf0f4;white-space:nowrap;font-variant-numeric:tabular-nums}
+td.n{text-align:right} td.c{text-align:center} td.desc{white-space:normal;min-width:200px}
+tr:hover td{background:#f7f9fc}
+td.sticky,th.sticky{position:sticky;left:0;z-index:1;background:#fff} th.sticky{z-index:3;background:var(--brand)}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11.5px;font-weight:700}
+.CRIT .pill,.pill.CRIT{background:var(--crit-bg);color:var(--crit)} .pill.ALERT{background:var(--alert-bg);color:var(--alert)}
+.pill.OVER{background:var(--over-bg);color:var(--over)} .pill.OK{background:var(--ok-bg);color:var(--ok)} .pill.NONE{background:var(--none-bg);color:var(--none)}
+.neg{color:var(--crit);font-weight:600} .pos{color:var(--over);font-weight:600}
+.cov-crit{background:var(--crit-bg)} .cov-alert{background:var(--alert-bg)}
+td input.cm{width:260px;font-size:12px;padding:4px 6px}
+.drops{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.drop{border:2px dashed #b9c4d6;border-radius:8px;padding:16px;background:#fafbfd;cursor:pointer;position:relative}
+.drop.drag{border-color:var(--brand);background:#eef3fb}
+.drop h3{margin:0 0 4px;font-size:14px;color:var(--brand)} .drop p{margin:4px 0;color:var(--muted);font-size:12.5px}
+.drop .status{margin-top:10px;font-size:12.5px} .drop .status b{color:var(--ok)}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.form{display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:8px 12px;align-items:center}
+.form label{font-weight:600;font-size:13px} .form .hint{grid-column:2;font-size:12px;color:var(--muted);margin-top:-4px}
+.muted{color:var(--muted);font-size:12.5px}
+.bar{height:8px;background:#e7ebf1;border-radius:4px;position:relative;min-width:120px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--brand-2)}
+.bar b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+ul.steps li{margin-bottom:6px}
+@media (max-width:700px){main{padding:12px 16px} header{padding:12px 16px} .form{grid-template-columns:1fr} .form .hint{grid-column:1}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Avance de venta vs Forecast / Inventario</h1>
+    <div class="sub">Mercado Interno · detección temprana de quiebres</div>
+  </div>
+  <div class="meta" id="hdrMeta"></div>
+</header>
+<nav id="tabs">
+  <button data-t="tablero" class="on">Tablero</button>
+  <button data-t="vendedores">Vendedores</button>
+  <button data-t="cargar">Cargar datos</button>
+  <button data-t="parametros">Parámetros</button>
+  <button data-t="bitacora">Bitácora</button>
+  <button data-t="ayuda">Cómo funciona</button>
+</nav>
+<main>
+  <!-- TABLERO -->
+  <section id="tablero" class="on">
+    <div id="tabWarn"></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="kpis" id="stkpis"></div>
+    <div class="card">
+      <div class="toolbar">
+        <input id="q" placeholder="Buscar código o descripción" style="min-width:240px">
+        <select id="fNeg"><option value="">Todos los negocios</option></select>
+        <select id="fLin"><option value="">Todas las líneas</option></select>
+        <select id="fSt"><option value="">Todos los estatus</option></select>
+        <label class="muted"><input type="checkbox" id="fHide" checked> Ocultar SIN FCST</label>
+        <span style="margin-left:auto"></span>
+        <button class="btn sec" id="btnExport">Exportar a Excel</button>
+      </div>
+      <div class="tablewrap"><table id="tbl"></table></div>
+      <div class="muted" id="tblCount" style="margin-top:6px"></div>
+    </div>
+  </section>
+
+  <!-- VENDEDORES -->
+  <section id="vendedores">
+    <div id="venWarn"></div>
+    <div class="card">
+      <h2>Avance por vendedor</h2>
+      <div class="tablewrap" style="max-height:none"><table id="vtbl"></table></div>
+      <p class="muted">Asigna a cada vendedor del reporte VENDIDO el Gerente Regional del forecast. La asignación se guarda.</p>
+    </div>
+    <div class="card">
+      <h2>Detalle por artículo y vendedor</h2>
+      <div class="toolbar"><input id="vq" placeholder="Buscar código o descripción" style="min-width:240px">
+        <label class="muted"><input type="checkbox" id="vOnlyLag"> Solo artículos atrasados</label></div>
+      <div class="tablewrap"><table id="vdtbl"></table></div>
+    </div>
+  </section>
+
+  <!-- CARGAR -->
+  <section id="cargar">
+    <div class="info">Los archivos se procesan <b>solo en tu navegador</b>; no se suben a ningún servidor. Quedan guardados en este navegador hasta que cargues otros.</div>
+    <div class="drops">
+      <div class="drop" id="dFcst">
+        <h3>1 · Forecast (fijo del mes)</h3>
+        <p>Archivo <i>Forecast Ciclo IBP</i>. Se usa la hoja <b>BASE</b>. Se carga una vez por ciclo.</p>
+        <input type="file" accept=".xlsx,.xls,.xlsm,.csv">
+        <div class="status"></div>
+      </div>
+      <div class="drop" id="dStock">
+        <h3>2 · Stock actual</h3>
+        <p>Reporte <i>Stock Crítico Depurado (SIN R.F) MI</i>, tal cual llega.</p>
+        <input type="file" accept=".xlsx,.xls,.xlsm,.csv">
+        <div class="status"></div>
+      </div>
+      <div class="drop" id="dVend">
+        <h3>3 · Vendido del mes</h3>
+        <p>Tabla <i>VENDIDO</i> (Suma de BU por artículo y vendedor), tal cual.</p>
+        <input type="file" accept=".xlsx,.xls,.xlsm,.csv">
+        <div class="status"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Fecha de corte</h2>
+      <div class="form">
+        <label for="pCorte">Último día incluido en el vendido</label><input type="date" id="pCorte">
+        <div class="hint">Al cargar un vendido nuevo se propone el último día hábil anterior a hoy. Ajústala si el reporte llega a otra fecha.</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Respaldo</h2>
+      <p class="muted">Para pasar tu información a otra computadora o navegador: descarga el respaldo y cárgalo allá.</p>
+      <div class="toolbar">
+        <button class="btn sec" id="btnBackup">Descargar respaldo (.json)</button>
+        <label class="btn sec" style="display:inline-block;border:1px solid var(--brand);border-radius:6px;padding:7px 14px;color:var(--brand);cursor:pointer">Cargar respaldo<input type="file" id="inRestore" accept=".json" hidden></label>
+        <button class="btn danger" id="btnClear">Borrar todo</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PARAMETROS -->
+  <section id="parametros">
+    <div class="grid2">
+      <div class="card">
+        <h2>Parámetros de cálculo</h2>
+        <div class="form" id="pForm"></div>
+      </div>
+      <div class="card">
+        <h2>Calendario del mes</h2>
+        <div id="pCal" class="form"></div>
+        <h2 style="margin-top:18px">Días feriados / no laborables</h2>
+        <textarea id="pFer" rows="10" style="width:100%;font-family:monospace;font-size:12.5px"></textarea>
+        <p class="muted">Una fecha por línea (aaaa-mm-dd). Agrega cierres de CD o inventarios.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- BITACORA -->
+  <section id="bitacora">
+    <div class="card">
+      <h2>Registrar la corrida de hoy</h2>
+      <div class="form">
+        <label for="bProg">Fecha programada</label><input type="date" id="bProg">
+        <label for="bResp">Responsable</label><input id="bResp" placeholder="Nombre">
+        <label for="bAcc">Acciones acordadas</label><textarea id="bAcc" rows="3"></textarea>
+        <span></span><div><button class="btn" id="btnReg">Registrar corrida</button> <span class="muted">Guarda la fecha de corte, los SKUs en CRÍTICO/ALERTA y el faltante del tablero actual.</span></div>
+      </div>
+    </div>
+    <div class="kpis"><div class="kpi"><div class="l">% de ejecución en fecha</div><div class="v" id="bPct">–</div></div><div class="kpi"><div class="l">Corridas registradas</div><div class="v" id="bN">0</div></div></div>
+    <div class="card"><div class="tablewrap" style="max-height:none"><table id="btbl"></table></div>
+      <div class="toolbar" style="margin-top:10px"><button class="btn sec" id="btnBitExp">Exportar bitácora a Excel</button></div></div>
+  </section>
+
+  <!-- AYUDA -->
+  <section id="ayuda">
+    <div class="card">
+      <h2>Proceso</h2>
+      <ol class="steps">
+        <li>Al inicio del ciclo IBP, carga el <b>Forecast</b>. Queda fijo hasta que cargues otro.</li>
+        <li>En cada corrida, carga el <b>Stock</b> y el <b>Vendido</b> tal cual llegan, y confirma la <b>fecha de corte</b>.</li>
+        <li>Revisa el <b>Tablero</b>: SKUs en CRÍTICO y ALERTA, la fecha estimada de quiebre, el faltante y la acción sugerida. Anota la acción acordada en la última columna.</li>
+        <li>Revisa <b>Vendedores</b>: avance de cada vendedor contra el forecast de su gerente.</li>
+        <li>Registra la corrida en la <b>Bitácora</b>. Es la evidencia del indicador "medido en fecha de ejecución".</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Cómo calcula</h2>
+      <ul class="steps">
+        <li><b>Avance de venta</b> = vendido del mes ('Total general') ÷ Forecast Consensuado del mes del canal elegido (Supermercados por defecto).</li>
+        <li>El código del vendido trae el prefijo 901 (90157000237 = 57000237): se toman los últimos 8 dígitos y se suman las filas repetidas.</li>
+        <li><b>Avance esperado</b> = días transcurridos ÷ días del mes (hábiles o naturales).</li>
+        <li><b>Stock disponible</b> = 'Total Disponible' del reporte (ya neto de comprometido, sin vencido). Los negativos cuentan como 0.</li>
+        <li>El stock del CD es compartido. La cobertura y el faltante suman la demanda del canal + el forecast de los otros canales para los días que faltan (se puede apagar).</li>
+        <li><b>Demanda diaria del canal</b> = la mayor entre el ritmo real y el forecast diario (conservador).</li>
+        <li><b>Días de cobertura</b> = stock ÷ demanda diaria total. <b>Fecha de quiebre</b> = fecha de corte + cobertura.</li>
+        <li><b>Faltante</b> = demanda restante total − stock disponible.</li>
+        <li><span class="pill CRIT">CRÍTICO</span> cobertura ≤ crítica, o el stock se acaba antes del lead time y hay faltante.
+            <span class="pill ALERT">ALERTA</span> cobertura ≤ alerta, o hay faltante en el mes.
+            <span class="pill OVER">SOBREINV.</span> venta debajo de lo esperado (más que la tolerancia) y el stock supera la demanda restante.
+            <span class="pill NONE">SIN FCST</span> sin venta y con forecast menor al mínimo relevante.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
