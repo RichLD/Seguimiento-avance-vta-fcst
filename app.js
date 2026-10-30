@@ -75,46 +75,64 @@
   }
 
   function parseStock(wb, name) {
-    const rows = rowsOf(wb.Sheets[wb.SheetNames[0]]);
-    for (let h = 0; h < Math.min(rows.length, 20); h++) {
-      const hdr = (rows[h] || []).map(norm);
-      const ca = hdr.indexOf("articulo"), ct = hdr.indexOf("total disponible");
-      if (ca < 0 || ct < 0) continue;
-      const c30 = hdr.findIndex((x) => x.includes("0 a 30"));
-      const cv = hdr.findIndex((x) => x.includes("vencido"));
-      const map = {};
-      for (let r = h + 1; r < rows.length; r++) {
-        const x = rows[r]; if (!x || !isCode(x[ca])) continue;
-        const c = parseInt(x[ca], 10);
-        const o = map[c] || (map[c] = { d: String(x[ca + 1] || "").trim(), disp: 0, v30: 0, venc: 0 });
-        o.disp += num(x[ct]); if (c30 >= 0) o.v30 += num(x[c30]); if (cv >= 0) o.venc += num(x[cv]);
+    for (const sn of wb.SheetNames) {
+      const rows = rowsOf(wb.Sheets[sn]);
+      for (let h = 0; h < Math.min(rows.length, 25); h++) {
+        const hdr = (rows[h] || []).map(norm);
+        const ca = hdr.indexOf("articulo"), ct = hdr.indexOf("total disponible");
+        if (ca < 0 || ct < 0) continue;
+        const c30 = hdr.findIndex((x) => x.includes("0 a 30"));
+        const cv = hdr.findIndex((x) => x.includes("vencido"));
+        const map = {};
+        for (let r = h + 1; r < rows.length; r++) {
+          const x = rows[r]; if (!x || !isCode(x[ca])) continue;
+          const c = parseInt(x[ca], 10);
+          const o = map[c] || (map[c] = { d: String(x[ca + 1] || "").trim(), disp: 0, v30: 0, venc: 0 });
+          o.disp += num(x[ct]); if (c30 >= 0) o.v30 += num(x[c30]); if (cv >= 0) o.venc += num(x[cv]);
+        }
+        if (Object.keys(map).length) return { map, file: name, sheet: sn, at: new Date().toISOString() };
       }
-      if (Object.keys(map).length) return { map, file: name, at: new Date().toISOString() };
     }
-    throw new Error("No encontré el encabezado con 'Articulo' y 'Total Disponible'.");
+    throw new Error("No encontré en ninguna hoja el encabezado con 'Articulo' y 'Total Disponible'.");
   }
 
   function parseVend(wb, name) {
-    const rows = rowsOf(wb.Sheets[wb.SheetNames[0]]);
-    for (let h = 0; h < Math.min(rows.length, 20); h++) {
-      const hdr = rows[h] || []; const nh = hdr.map(norm);
-      const tg = nh.indexOf("total general");
-      if (tg < 0) continue;
-      const cc = nh.findIndex((x) => x.includes("articulo") || x.includes("codigo"));
-      const codeCol = cc >= 0 ? cc : 0, descCol = codeCol + 1;
-      const vendors = [];
-      for (let c = descCol + 1; c < tg; c++) if (hdr[c] != null && String(hdr[c]).trim()) vendors.push({ c, n: String(hdr[c]).trim() });
-      const map = {};
-      for (let r = h + 1; r < rows.length; r++) {
-        const x = rows[r]; if (!x || !isCode(x[codeCol])) continue;
-        const s = String(x[codeCol]).trim(); const c = parseInt(s.slice(-8), 10);
-        const o = map[c] || (map[c] = { d: String(x[descCol] || "").trim(), tot: 0, by: {} });
-        o.tot += num(x[tg]);
-        vendors.forEach((v) => { o.by[v.n] = (o.by[v.n] || 0) + num(x[v.c]); });
+    for (const sn of wb.SheetNames) {
+      const rows = rowsOf(wb.Sheets[sn]);
+      for (let h = 0; h < Math.min(rows.length, 25); h++) {
+        const hdr = rows[h] || []; const nh = hdr.map(norm);
+        const tg = nh.indexOf("total general");
+        if (tg < 0) continue;
+        const cc = nh.findIndex((x) => x.includes("articulo") || x.includes("codigo"));
+        const codeCol = cc >= 0 ? cc : 0, descCol = codeCol + 1;
+        const vendors = [];
+        for (let c = descCol + 1; c < tg; c++) if (hdr[c] != null && String(hdr[c]).trim()) vendors.push({ c, n: String(hdr[c]).trim() });
+        const map = {};
+        let last = null; // para tablas dinámicas que no repiten el código en cada fila
+        for (let r = h + 1; r < rows.length; r++) {
+          const x = rows[r]; if (!x) continue;
+          const raw = x[codeCol], txt = norm(raw);
+          let c;
+          if (isCode(raw)) { c = parseInt(String(raw).trim().slice(-8), 10); last = c; }
+          else if (txt.includes("total")) { last = null; continue; }
+          else if (txt === "" && last != null && String(x[descCol] || "").trim() && !norm(x[descCol]).includes("total")) c = last;
+          else continue;
+          const o = map[c] || (map[c] = { d: String(x[descCol] || "").trim(), tot: 0, by: {} });
+          o.tot += num(x[tg]);
+          vendors.forEach((v) => { o.by[v.n] = (o.by[v.n] || 0) + num(x[v.c]); });
+        }
+        if (Object.keys(map).length) return { map, vendors: vendors.map((v) => v.n), file: name, sheet: sn, at: new Date().toISOString() };
       }
-      if (Object.keys(map).length) return { map, vendors: vendors.map((v) => v.n), file: name, at: new Date().toISOString() };
     }
-    throw new Error("No encontré el encabezado con 'Total general'.");
+    throw new Error("No encontré en ninguna hoja el encabezado con 'Total general'.");
+  }
+
+  // Empata un vendedor (p. ej. "Karime Cortés") con un gerente del forecast ("CORTES KAREN KARIME")
+  function autoGerente(vn, gerentes) {
+    const tk = (s) => norm(s).replace(/[^a-z ]/g, " ").split(" ").filter((t) => t.length > 1);
+    const v = tk(vn); if (!v.length) return "";
+    const hits = gerentes.filter((g) => { const gs = new Set(tk(g)); return v.every((t) => gs.has(t)); });
+    return hits.length === 1 ? hits[0] : "";
   }
 
   // ---------------- Cálculo ----------------
@@ -183,15 +201,15 @@
     }
     // vendedores
     const vendors = (S.vend && S.vend.vendors) || [];
+    const gerentes = Object.keys(gerCanal).sort();
     const vrows = vendors.map((vn) => {
-      const g = (S.vmap[vn] || "").trim();
+      const g = (vn in S.vmap ? S.vmap[vn] : autoGerente(vn, gerentes) || "").trim();
       let vend = 0; for (const c in vm) vend += vm[c].by[vn] || 0;
       const fc = g ? (gerCanal[g] || 0) : 0;
       const av = fc ? vend / fc : null, proj = dtr ? vend / dtr * dm : 0;
       const dev = av == null ? null : av - esp;
       return { vn, g, fc, vend, av, dev, proj, pv: fc ? proj / fc : null, gap: Math.max(fc - vend, 0), st: dev == null ? "" : dev < -p.tol ? "ATRASADO" : dev > p.tol ? "ADELANTADO" : "EN LÍNEA" };
     });
-    const gerentes = Object.keys(gerCanal).sort();
     const asignados = new Set(vrows.map((v) => v.g).filter(Boolean));
     const fcSinVend = gerentes.filter((g) => !asignados.has(g)).reduce((a, g) => a + gerCanal[g], 0);
     R = { rows, mes, dm, dtr, dr, esp, corte: p.corte, vrows, gerentes, gerCanal, fcGer, fcSinVend, vendors,
