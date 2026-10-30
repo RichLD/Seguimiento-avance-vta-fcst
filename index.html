@@ -80,6 +80,7 @@ ul.steps li{margin-bottom:6px}
 <nav id="tabs">
   <button data-t="tablero" class="on">Tablero</button>
   <button data-t="vendedores">Vendedores</button>
+  <button data-t="ajuste">Ajuste Fcst</button>
   <button data-t="cargar">Cargar datos</button>
   <button data-t="parametros">Parámetros</button>
   <button data-t="bitacora">Bitácora</button>
@@ -122,6 +123,36 @@ ul.steps li{margin-bottom:6px}
     </div>
   </section>
 
+  <!-- AJUSTE FCST -->
+  <section id="ajuste">
+    <div id="hWarn"></div>
+    <div id="hBody">
+      <div class="card">
+        <div class="toolbar">
+          <label class="muted">Mes a revisar <select id="hMes"></select></label>
+          <label class="muted">Vendedor <select id="hVend"></select></label>
+          <label class="muted">Base del sugerido <select id="hMeth">
+            <option value="Auto">Automático (año anterior × tendencia)</option>
+            <option>Prom 3M</option><option>Prom 6M</option><option>Mismo mes año anterior</option></select></label>
+          <label class="muted">Umbral ± <input type="number" id="hThr" min="0" step="5" style="width:64px"> %</label>
+        </div>
+        <p class="muted" style="margin:0">Compara el forecast del mes elegido contra lo que de verdad se ha vendido. <b>Automático</b> toma la venta del mismo mes del año anterior y la ajusta por la tendencia de los últimos 3 meses contra los mismos meses del año anterior (limitada entre −50% y +100%). Si no hay venta del año anterior, usa el promedio de 3 meses. Los promedios empiezan a contar desde la primera venta del artículo, para no castigar lanzamientos.</p>
+      </div>
+      <div class="kpis" id="hKpis"></div>
+      <div class="kpis" id="hSt"></div>
+      <div class="card">
+        <div class="toolbar">
+          <input id="hq" placeholder="Buscar código o descripción" style="min-width:240px">
+          <label class="muted"><input type="checkbox" id="hHide" checked> Ocultar sin movimiento</label>
+          <span style="margin-left:auto"></span>
+          <button class="btn sec" id="btnHistExp">Exportar a Excel</button>
+        </div>
+        <div class="tablewrap"><table id="htbl"></table></div>
+        <div class="muted" id="hCount" style="margin-top:6px"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- CARGAR -->
   <section id="cargar">
     <div class="info">Los archivos se procesan <b>solo en tu navegador</b>; no se suben a ningún servidor. Quedan guardados en este navegador hasta que cargues otros.</div>
@@ -141,6 +172,12 @@ ul.steps li{margin-bottom:6px}
       <div class="drop" id="dVend">
         <h3>3 · Vendido del mes</h3>
         <p>Tabla <i>VENDIDO</i> (Suma de BU por artículo y vendedor), tal cual.</p>
+        <input type="file" accept=".xlsx,.xls,.xlsm,.csv">
+        <div class="status"></div>
+      </div>
+      <div class="drop" id="dHist">
+        <h3>4 · Historial de venta (sell-in)</h3>
+        <p>Tabla con <i>Territorio, artículo, descripción</i> y <b>Año / Mes en columnas</b>. Se actualiza al cerrar cada mes. Si pesa mucho, cópiala como valores a un libro nuevo para que cargue más rápido.</p>
         <input type="file" accept=".xlsx,.xls,.xlsm,.csv">
         <div class="status"></div>
       </div>
@@ -205,6 +242,7 @@ ul.steps li{margin-bottom:6px}
         <li>En cada corrida, carga el <b>Stock</b> y el <b>Vendido</b> tal cual llegan, y confirma la <b>fecha de corte</b>.</li>
         <li>Revisa el <b>Tablero</b>: SKUs en CRÍTICO y ALERTA, la fecha estimada de quiebre, el faltante y la acción sugerida. Anota la acción acordada en la última columna.</li>
         <li>Revisa <b>Vendedores</b>: avance de cada vendedor contra el forecast de su gerente.</li>
+        <li>Antes del consenso IBP, revisa <b>Ajuste Fcst</b>: forecast contra historial de venta, anota tu propuesta y expórtala.</li>
         <li>Registra la corrida en la <b>Bitácora</b>. Es la evidencia del indicador "medido en fecha de ejecución".</li>
       </ol>
     </div>

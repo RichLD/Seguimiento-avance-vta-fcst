@@ -9,8 +9,9 @@ Herramienta web para la detección temprana de posibles quiebres en Mercado Inte
 1. **Cargar datos → Forecast**: archivo *Forecast Ciclo IBP* (hoja BASE). Se carga una vez por ciclo y queda fijo.
 2. **Cargar datos → Stock**: reporte *Stock Crítico Depurado (SIN R.F) MI*, tal cual llega.
 3. **Cargar datos → Vendido**: tabla *VENDIDO* (Suma de BU por artículo y vendedor), tal cual.
-4. Confirmar la **fecha de corte**.
-5. Revisar **Tablero** y **Vendedores**, anotar acciones y **registrar la corrida en la Bitácora**.
+4. **Cargar datos → Historial de venta** (opcional): tabla con Territorio, artículo, descripción y Año/Mes en columnas. Alimenta la pestaña **Ajuste Fcst**.
+5. Confirmar la **fecha de corte**.
+6. Revisar **Tablero**, **Vendedores** y **Ajuste Fcst**, anotar acciones y **registrar la corrida en la Bitácora**.
 
 Con **Respaldo** puedes llevar tu información a otra computadora o navegador.
 
