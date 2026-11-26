@@ -340,6 +340,15 @@
     const sm = (S.stock && S.stock.map) || {}, vm = (S.vend && S.vend.map) || {};
     const codes = new Set([...Object.keys(fcC), ...Object.keys(fcO), ...Object.keys(sm), ...Object.keys(vm)].map(Number));
 
+    // Promedio de venta de los últimos 3 meses cerrados (historial sell-in, todos los vendedores)
+    const H = S.hist, L3 = [addM(mes, -3), addM(mes, -2), addM(mes, -1)];
+    const prom3 = (A) => {
+      const o = H && H.map[A]; if (!o) return null;
+      const q = (ym) => { let t = 0; for (const v in o.by) t += o.by[v][ym] || 0; return t; };
+      let first = null; for (const ym of H.months) if (ym < mes && q(ym) > 0) { first = ym; break; }
+      const ws = first ? L3.filter((m) => m >= first) : [];
+      return ws.length ? ws.reduce((a, m) => a + q(m), 0) / ws.length : 0;
+    };
     const rows = [];
     for (const A of codes) {
       const inf = info[A] || {};
@@ -373,7 +382,8 @@
       else if (X === "SOBREINV.") Y = "Venta debajo de Fcst: revisar con comercial y ajustar Fcst";
       else if (X === "SIN FCST") Y = O > 0 ? "Stock sin forecast: validar con demanda/comercial" : "Sin movimiento";
       else Y = E === 0 && Fv > 0 ? "Venta sin forecast en el canal: validar Fcst" : "Sin acción";
-      rows.push({ A, B, C: inf.neg || "Sin fcst", Dl: inf.lin || "Sin fcst", E, F: Fv, Cg, G, H, I, J, K: Kd, L, M, N, O, P: Pv, R: Rp, S: Sd, T, U, V, W, X, Y });
+      const P3 = prom3(A), FP = P3 ? E / P3 - 1 : null;
+      rows.push({ A, B, C: inf.neg || "Sin fcst", Dl: inf.lin || "Sin fcst", E, P3, FP, F: Fv, Cg, G, H, I, J, K: Kd, L, M, N, O, P: Pv, R: Rp, S: Sd, T, U, V, W, X, Y });
     }
     // vendedores
     const vendors = (S.vend && S.vend.vendors) || [];
@@ -389,7 +399,7 @@
     const asignados = new Set(vrows.map((v) => v.g).filter(Boolean));
     const fcSinVend = gerentes.filter((g) => !asignados.has(g)).reduce((a, g) => a + gerCanal[g], 0);
     R = { rows, mes, dm, dtr, dr, esp, corte: p.corte, vrows, gerentes, gerCanal, fcGer, fcSinVend, vendors,
-      hasFcstMonth: !!(S.fcst && S.fcst.months.includes(mes)), hasCar: !!(S.vend && S.vend.hasStatus) };
+      hasFcstMonth: !!(S.fcst && S.fcst.months.includes(mes)), hasCar: !!(S.vend && S.vend.hasStatus), L3 };
   }
 
   // ---------------- Render ----------------
@@ -429,7 +439,7 @@
 
   const COLS = [
     ["A", "Código", "c"], ["B", "Descripción", "desc"], ["C", "Negocio"], ["Dl", "Línea"],
-    ["E", "Fcst mes canal", "n", n0], ["F", "Venta MTD (fact. + cargado)", "n", n0], ["Cg", "Cargado sin facturar", "n", n0], ["G", "% Avance", "n", (v) => pct(v)], ["I", "Desv. vs esperado", "n", sp],
+    ["E", "Fcst mes canal", "n", n0], ["P3", "Prom venta 3M", "n", (v) => (v == null ? "s/hist" : n0(v))], ["FP", "Fcst vs Prom 3M", "n", (v) => (v == null ? "" : sp(v))], ["F", "Venta MTD (fact. + cargado)", "n", n0], ["Cg", "Cargado sin facturar", "n", n0], ["G", "% Avance", "n", (v) => pct(v)], ["I", "Desv. vs esperado", "n", sp],
     ["J", "Ritmo diario", "n", (v) => nf1.format(v)], ["L", "Proyección cierre", "n", n0], ["M", "Proy. vs Fcst", "n", (v) => pct(v)],
     ["N", "Fcst otros canales", "n", n0], ["O", "Stock disponible", "n", n0], ["P", "Por vencer ≤30d", "n", n0],
     ["S", "Demanda restante", "n", n0], ["T", "Faltante est.", "n", n0], ["U", "Días cobertura", "n", (v) => (v >= 999 ? "–" : nf1.format(v))],
@@ -465,6 +475,7 @@
         if (k === "I" && r.E > 0) c += v < -p.tol ? " pos" : v > p.tol ? " neg" : "";
         if (k === "U" && v <= p.crit) c += " cov-crit"; else if (k === "U" && v <= p.alerta) c += " cov-alert";
         if (k === "T" && v > 0) c += " neg";
+        if (k === "FP" && v != null) c += v < -p.hThr ? " neg" : v > p.hThr ? " pos" : "";
         if (k === "W" && v === "Sí") c += " neg";
         h += '<td class="' + c + '">' + out + "</td>";
       }
@@ -579,7 +590,7 @@
   function exportXlsx() {
     const wb = XLSX.utils.book_new();
     const tab = R.rows.slice().sort((a, b) => ORD[a.X] - ORD[b.X] || a.U - b.U).map((r) => ({
-      "Código": r.A, "Descripción": r.B, "Negocio": r.C, "Línea": r.Dl, "Fcst mes canal": +r.E.toFixed(1), "Venta MTD (fact. + cargado)": r.F, "Cargado sin facturar": r.Cg, "% Avance": +r.G.toFixed(4),
+      "Código": r.A, "Descripción": r.B, "Negocio": r.C, "Línea": r.Dl, "Fcst mes canal": +r.E.toFixed(1), "Prom venta 3M": r.P3 == null ? "" : +r.P3.toFixed(1), "Fcst vs Prom 3M": r.FP == null ? "" : +r.FP.toFixed(4), "Venta MTD (fact. + cargado)": r.F, "Cargado sin facturar": r.Cg, "% Avance": +r.G.toFixed(4),
       "% Esperado": +r.H.toFixed(4), "Desviación": +r.I.toFixed(4), "Ritmo diario": +r.J.toFixed(2), "Proyección cierre": +r.L.toFixed(1), "Proy vs Fcst": +r.M.toFixed(4),
       "Fcst otros canales": +r.N.toFixed(1), "Stock disponible": r.O, "Por vencer ≤30d": r.P, "Demanda restante": +r.S.toFixed(1), "Faltante": +r.T.toFixed(1),
       "Días cobertura": r.U >= 999 ? "" : +r.U.toFixed(1), "Fecha est. quiebre": /^\d/.test(r.V) ? fmtD(r.V) : r.V, "Quiebre antes LT": r.W, "Estatus": r.X, "Acción sugerida": r.Y, "Acción acordada": S.cm[r.A] || "",
@@ -618,7 +629,7 @@
 
   ["q", "fNeg", "fLin", "fSt", "fHide"].forEach((id) => $(id).addEventListener(id === "q" ? "input" : "change", () => { if (id === "fSt") UI.st = ""; if (id === "fNeg") fillFilters(); renderKpis(); renderTable(); }));
   $("stkpis").addEventListener("click", (e) => { const k = e.target.closest("[data-st]"); if (!k) return; UI.st = UI.st === k.dataset.st ? "" : k.dataset.st; $("fSt").value = ""; renderKpis(); renderTable(); });
-  $("tbl").addEventListener("click", (e) => { const th = e.target.closest("th[data-k]"); if (!th || th.classList.contains("nosort")) return; const k = th.dataset.k; UI.sort = { k, dir: UI.sort.k === k ? -UI.sort.dir : (["E","F","N","O","P","S","T","L"].includes(k) ? -1 : 1) }; renderTable(); });
+  $("tbl").addEventListener("click", (e) => { const th = e.target.closest("th[data-k]"); if (!th || th.classList.contains("nosort")) return; const k = th.dataset.k; UI.sort = { k, dir: UI.sort.k === k ? -UI.sort.dir : (["E","F","N","O","P","S","T","L","P3","Cg"].includes(k) ? -1 : 1) }; renderTable(); });
   $("tbl").addEventListener("change", (e) => { const i = e.target.closest("input.cm"); if (!i) return; const v = i.value.trim(); if (v) S.cm[i.dataset.c] = v; else delete S.cm[i.dataset.c]; save(K.cm, S.cm); });
   $("vtbl").addEventListener("change", (e) => { const s = e.target.closest("select[data-v]"); if (!s) return; S.vmap[s.dataset.v] = s.value; save(K.vmap, S.vmap); compute(); renderVend(); });
   $("vq").addEventListener("input", renderVendDetail); $("vOnlyLag").addEventListener("change", renderVendDetail);

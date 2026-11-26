@@ -251,6 +251,7 @@ ul.steps li{margin-bottom:6px}
       <ul class="steps">
         <li><b>Avance de venta</b> = vendido del mes, facturado + cargado sin facturar ('Total general'), ÷ Forecast Consensuado del mes del canal elegido (Supermercados por defecto). Lo cargado ya está descontado del stock como "Comprometido", así que no se resta otra vez.</li>
         <li>El código del vendido trae el prefijo 901 (90157000237 = 57000237): se toman los últimos 8 dígitos y se suman las filas repetidas.</li>
+        <li><b>Prom venta 3M</b> = promedio mensual de venta de los 3 meses cerrados anteriores al mes de corte, del historial sell-in (todos los vendedores). Si el artículo empezó a venderse hace menos de 3 meses, promedia solo desde su primera venta. "s/hist" = el artículo no viene en el historial. <b>Fcst vs Prom 3M</b> se marca en rojo o azul cuando pasa el umbral de Ajuste Fcst (±20%).</li>
         <li><b>Avance esperado</b> = días transcurridos ÷ días del mes (hábiles o naturales).</li>
         <li><b>Stock disponible</b> = 'Total Disponible' del reporte (ya neto de comprometido, sin vencido). Los negativos cuentan como 0.</li>
         <li>El stock del CD es compartido. La cobertura y el faltante suman la demanda del canal + el forecast de los otros canales para los días que faltan (se puede apagar).</li>
