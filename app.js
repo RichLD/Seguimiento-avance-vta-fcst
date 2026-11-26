@@ -97,6 +97,8 @@
     throw new Error("No encontré en ninguna hoja el encabezado con 'Articulo' y 'Total Disponible'.");
   }
 
+  // Vendido: tabla dinámica con vendedores en columnas y "Total general".
+  // Opcional: columna "Estatus" (Facturado / Abierto): lo que no es facturado cuenta como cargado sin facturar.
   function parseVend(wb, name) {
     for (const sn of wb.SheetNames) {
       const rows = rowsOf(wb.Sheets[sn]);
@@ -105,24 +107,30 @@
         const tg = nh.indexOf("total general");
         if (tg < 0) continue;
         const cc = nh.findIndex((x) => x.includes("articulo") || x.includes("codigo"));
-        const codeCol = cc >= 0 ? cc : 0, descCol = codeCol + 1;
+        const codeCol = cc >= 0 ? cc : 0;
+        const dc = nh.findIndex((x) => x.includes("descripcion"));
+        const descCol = dc >= 0 ? dc : -1;
+        const stCol = nh.findIndex((x) => x === "estatus" || x === "status" || x.includes("estatus"));
         const vendors = [];
-        for (let c = descCol + 1; c < tg; c++) if (hdr[c] != null && String(hdr[c]).trim()) vendors.push({ c, n: String(hdr[c]).trim() });
+        for (let c = Math.max(codeCol, descCol) + 1; c < tg; c++) if (c !== stCol && hdr[c] != null && String(hdr[c]).trim()) vendors.push({ c, n: String(hdr[c]).trim() });
         const map = {};
         let last = null; // para tablas dinámicas que no repiten el código en cada fila
+        const desc = (x) => (descCol >= 0 ? String(x[descCol] || "").trim() : "");
         for (let r = h + 1; r < rows.length; r++) {
           const x = rows[r]; if (!x) continue;
           const raw = x[codeCol], txt = norm(raw);
           let c;
           if (isCode(raw)) { c = parseInt(String(raw).trim().slice(-8), 10); last = c; }
           else if (txt.includes("total")) { last = null; continue; }
-          else if (txt === "" && last != null && String(x[descCol] || "").trim() && !norm(x[descCol]).includes("total")) c = last;
+          else if (txt === "" && last != null && (descCol >= 0 ? desc(x) && !norm(desc(x)).includes("total") : x[tg] != null)) c = last;
           else continue;
-          const o = map[c] || (map[c] = { d: String(x[descCol] || "").trim(), tot: 0, by: {} });
-          o.tot += num(x[tg]);
-          vendors.forEach((v) => { o.by[v.n] = (o.by[v.n] || 0) + num(x[v.c]); });
+          const car = stCol >= 0 && norm(x[stCol]) !== "" && !norm(x[stCol]).includes("factur");
+          const o = map[c] || (map[c] = { d: desc(x), tot: 0, fac: 0, car: 0, by: {}, byC: {} });
+          if (!o.d) o.d = desc(x);
+          const q = num(x[tg]); o.tot += q; if (car) o.car += q; else o.fac += q;
+          vendors.forEach((v) => { const qv = num(x[v.c]); o.by[v.n] = (o.by[v.n] || 0) + qv; if (car) o.byC[v.n] = (o.byC[v.n] || 0) + qv; });
         }
-        if (Object.keys(map).length) return { map, vendors: vendors.map((v) => v.n), file: name, sheet: sn, at: new Date().toISOString() };
+        if (Object.keys(map).length) return { map, vendors: vendors.map((v) => v.n), hasStatus: stCol >= 0, file: name, sheet: sn, at: new Date().toISOString() };
       }
     }
     throw new Error("No encontré en ninguna hoja el encabezado con 'Total general'.");
@@ -336,7 +344,7 @@
       const inf = info[A] || {};
       const st = sm[A], vd = vm[A];
       const B = (st && st.d) || inf.d || (vd && vd.d) || "Sin descripción";
-      const E = fcC[A] || 0, Fv = vd ? vd.tot : 0;
+      const E = fcC[A] || 0, Fv = vd ? vd.tot : 0, Cg = vd ? vd.car || 0 : 0;
       const G = E ? Fv / E : 0, H = esp, I = G - H;
       const J = dtr ? Fv / dtr : 0, Kd = dm ? E / dm : 0;
       const L = Fv + J * dr, M = E ? L / E : 0;
@@ -364,23 +372,23 @@
       else if (X === "SOBREINV.") Y = "Venta debajo de Fcst: revisar con comercial y ajustar Fcst";
       else if (X === "SIN FCST") Y = O > 0 ? "Stock sin forecast: validar con demanda/comercial" : "Sin movimiento";
       else Y = E === 0 && Fv > 0 ? "Venta sin forecast en el canal: validar Fcst" : "Sin acción";
-      rows.push({ A, B, C: inf.neg || "Sin fcst", Dl: inf.lin || "Sin fcst", E, F: Fv, G, H, I, J, K: Kd, L, M, N, O, P: Pv, R: Rp, S: Sd, T, U, V, W, X, Y });
+      rows.push({ A, B, C: inf.neg || "Sin fcst", Dl: inf.lin || "Sin fcst", E, F: Fv, Cg, G, H, I, J, K: Kd, L, M, N, O, P: Pv, R: Rp, S: Sd, T, U, V, W, X, Y });
     }
     // vendedores
     const vendors = (S.vend && S.vend.vendors) || [];
     const gerentes = Object.keys(gerCanal).sort();
     const vrows = vendors.map((vn) => {
       const g = (vn in S.vmap ? S.vmap[vn] : autoGerente(vn, gerentes) || "").trim();
-      let vend = 0; for (const c in vm) vend += vm[c].by[vn] || 0;
+      let vend = 0, vcar = 0; for (const c in vm) { vend += vm[c].by[vn] || 0; vcar += (vm[c].byC || {})[vn] || 0; }
       const fc = g ? (gerCanal[g] || 0) : 0;
       const av = fc ? vend / fc : null, proj = dtr ? vend / dtr * dm : 0;
       const dev = av == null ? null : av - esp;
-      return { vn, g, fc, vend, av, dev, proj, pv: fc ? proj / fc : null, gap: Math.max(fc - vend, 0), st: dev == null ? "" : dev < -p.tol ? "ATRASADO" : dev > p.tol ? "ADELANTADO" : "EN LÍNEA" };
+      return { vn, g, fc, vend, vcar, av, dev, proj, pv: fc ? proj / fc : null, gap: Math.max(fc - vend, 0), st: dev == null ? "" : dev < -p.tol ? "ATRASADO" : dev > p.tol ? "ADELANTADO" : "EN LÍNEA" };
     });
     const asignados = new Set(vrows.map((v) => v.g).filter(Boolean));
     const fcSinVend = gerentes.filter((g) => !asignados.has(g)).reduce((a, g) => a + gerCanal[g], 0);
     R = { rows, mes, dm, dtr, dr, esp, corte: p.corte, vrows, gerentes, gerCanal, fcGer, fcSinVend, vendors,
-      hasFcstMonth: !!(S.fcst && S.fcst.months.includes(mes)) };
+      hasFcstMonth: !!(S.fcst && S.fcst.months.includes(mes)), hasCar: !!(S.vend && S.vend.hasStatus) };
   }
 
   // ---------------- Render ----------------
@@ -420,7 +428,7 @@
 
   const COLS = [
     ["A", "Código", "c"], ["B", "Descripción", "desc"], ["C", "Negocio"], ["Dl", "Línea"],
-    ["E", "Fcst mes canal", "n", n0], ["F", "Vendido MTD", "n", n0], ["G", "% Avance", "n", (v) => pct(v)], ["I", "Desv. vs esperado", "n", sp],
+    ["E", "Fcst mes canal", "n", n0], ["F", "Venta MTD (fact. + cargado)", "n", n0], ["Cg", "Cargado sin facturar", "n", n0], ["G", "% Avance", "n", (v) => pct(v)], ["I", "Desv. vs esperado", "n", sp],
     ["J", "Ritmo diario", "n", (v) => nf1.format(v)], ["L", "Proyección cierre", "n", n0], ["M", "Proy. vs Fcst", "n", (v) => pct(v)],
     ["N", "Fcst otros canales", "n", n0], ["O", "Stock disponible", "n", n0], ["P", "Por vencer ≤30d", "n", n0],
     ["S", "Demanda restante", "n", n0], ["T", "Faltante est.", "n", n0], ["U", "Días cobertura", "n", (v) => (v >= 999 ? "–" : nf1.format(v))],
@@ -476,19 +484,19 @@
     const p = S.params;
     $("venWarn").innerHTML = S.vend ? "" : '<div class="warn">Carga el reporte de <b>Vendido</b> para ver el avance por vendedor. <a href="#" data-go="cargar">Ir a Cargar datos</a></div>';
     const opts = (sel) => '<option value="">— sin asignar —</option>' + R.gerentes.map((g) => "<option" + (g === sel ? " selected" : "") + ' value="' + esc(g) + '">' + esc(g) + "</option>").join("");
-    let h = '<thead><tr><th class="nosort">Vendedor</th><th class="nosort">Gerente en forecast</th><th class="nosort">Forecast mes</th><th class="nosort">Vendido MTD</th><th class="nosort">% Avance vs esperado</th><th class="nosort">Desviación</th><th class="nosort">Proyección cierre</th><th class="nosort">Proy. vs Fcst</th><th class="nosort">Brecha a Fcst</th><th class="nosort">Estatus</th></tr></thead><tbody>';
-    let tf = 0, tv = 0, tp = 0, tg = 0;
+    let h = '<thead><tr><th class="nosort">Vendedor</th><th class="nosort">Gerente en forecast</th><th class="nosort">Forecast mes</th><th class="nosort">Venta MTD (fact. + cargado)</th><th class="nosort">Cargado sin facturar</th><th class="nosort">% Avance vs esperado</th><th class="nosort">Desviación</th><th class="nosort">Proyección cierre</th><th class="nosort">Proy. vs Fcst</th><th class="nosort">Brecha a Fcst</th><th class="nosort">Estatus</th></tr></thead><tbody>';
+    let tf = 0, tv = 0, tc = 0, tp = 0, tg = 0;
     const pillV = (s) => (s ? '<span class="pill ' + (s === "ATRASADO" ? "CRIT" : s === "ADELANTADO" ? "OVER" : "OK") + '">' + s + "</span>" : "");
     const bar = (av) => av == null ? "" : '<div style="display:flex;gap:8px;align-items:center"><div class="bar"><i style="width:' + Math.min(av, 1.5) / 1.5 * 100 + '%"></i><b style="left:' + R.esp / 1.5 * 100 + '%"></b></div>' + pct(av) + "</div>";
     for (const v of R.vrows) {
-      tf += v.fc; tv += v.vend; tp += v.proj; tg += v.gap;
-      h += "<tr><td><b>" + esc(v.vn) + '</b></td><td><select data-v="' + esc(v.vn) + '">' + opts(v.g) + '</select></td><td class="n">' + n0(v.fc) + '</td><td class="n">' + n0(v.vend) + "</td><td>" + bar(v.av) + '</td><td class="n ' + (v.dev == null ? "" : v.dev < -p.tol ? "neg" : v.dev > p.tol ? "pos" : "") + '">' + (v.dev == null ? "" : sp(v.dev)) + '</td><td class="n">' + n0(v.proj) + '</td><td class="n">' + pct(v.pv) + '</td><td class="n">' + n0(v.gap) + '</td><td class="c">' + pillV(v.st) + "</td></tr>";
+      tf += v.fc; tv += v.vend; tc += v.vcar; tp += v.proj; tg += v.gap;
+      h += "<tr><td><b>" + esc(v.vn) + '</b></td><td><select data-v="' + esc(v.vn) + '">' + opts(v.g) + '</select></td><td class="n">' + n0(v.fc) + '</td><td class="n">' + n0(v.vend) + '</td><td class="n">' + n0(v.vcar) + "</td><td>" + bar(v.av) + '</td><td class="n ' + (v.dev == null ? "" : v.dev < -p.tol ? "neg" : v.dev > p.tol ? "pos" : "") + '">' + (v.dev == null ? "" : sp(v.dev)) + '</td><td class="n">' + n0(v.proj) + '</td><td class="n">' + pct(v.pv) + '</td><td class="n">' + n0(v.gap) + '</td><td class="c">' + pillV(v.st) + "</td></tr>";
     }
     if (R.vrows.length) {
       const av = tf ? tv / tf : null, dev = av == null ? null : av - R.esp;
       const st = dev == null ? "" : dev < -p.tol ? "ATRASADO" : dev > p.tol ? "ADELANTADO" : "EN LÍNEA";
-      h += '<tr style="font-weight:700;background:#eef3fb"><td>Total</td><td></td><td class="n">' + n0(tf) + '</td><td class="n">' + n0(tv) + "</td><td>" + bar(av) + '</td><td class="n">' + (dev == null ? "" : sp(dev)) + '</td><td class="n">' + n0(tp) + '</td><td class="n">' + pct(tf ? tp / tf : null) + '</td><td class="n">' + n0(tg) + '</td><td class="c">' + pillV(st) + "</td></tr>";
-      h += '<tr><td colspan="10" class="muted">Forecast del canal sin vendedor asignado: <b>' + n0(R.fcSinVend) + "</b> cajas (gerentes sin reporte de vendido). La línea negra en la barra marca el avance esperado (" + pct(R.esp) + ").</td></tr>";
+      h += '<tr style="font-weight:700;background:#eef3fb"><td>Total</td><td></td><td class="n">' + n0(tf) + '</td><td class="n">' + n0(tv) + '</td><td class="n">' + n0(tc) + "</td><td>" + bar(av) + '</td><td class="n">' + (dev == null ? "" : sp(dev)) + '</td><td class="n">' + n0(tp) + '</td><td class="n">' + pct(tf ? tp / tf : null) + '</td><td class="n">' + n0(tg) + '</td><td class="c">' + pillV(st) + "</td></tr>";
+      h += '<tr><td colspan="11" class="muted">Forecast del canal sin vendedor asignado: <b>' + n0(R.fcSinVend) + "</b> cajas (gerentes sin reporte de vendido). La línea negra en la barra marca el avance esperado (" + pct(R.esp) + ").</td></tr>";
     }
     $("vtbl").innerHTML = h + "</tbody>";
     renderVendDetail();
@@ -516,7 +524,9 @@
     const st = (el, html) => (el.querySelector(".status").innerHTML = html);
     st($("dFcst"), S.fcst ? "<b>✓ Cargado:</b> " + esc(S.fcst.file) + "<br>Hoja " + esc(S.fcst.sheet) + " · " + nf0.format(S.fcst.rows.length) + " filas · meses " + S.fcst.months[0] + " a " + S.fcst.months[S.fcst.months.length - 1] : "Sin cargar");
     st($("dStock"), S.stock ? "<b>✓ Cargado:</b> " + esc(S.stock.file) + "<br>" + Object.keys(S.stock.map).length + " artículos · " + new Date(S.stock.at).toLocaleString("es-MX") : "Sin cargar");
-    st($("dVend"), S.vend ? "<b>✓ Cargado:</b> " + esc(S.vend.file) + "<br>" + Object.keys(S.vend.map).length + " artículos · vendedores: " + S.vend.vendors.map(esc).join(", ") : "Sin cargar");
+    const vt = (k) => Object.values((S.vend && S.vend.map) || {}).reduce((a, o) => a + (o[k] || 0), 0);
+    st($("dVend"), S.vend ? "<b>✓ Cargado:</b> " + esc(S.vend.file) + "<br>" + Object.keys(S.vend.map).length + " artículos · vendedores: " + S.vend.vendors.map(esc).join(", ") +
+      (S.vend.hasStatus ? "<br>Facturado: " + nf0.format(vt("fac")) + " · Cargado sin facturar: " + nf0.format(vt("car")) + " cajas" : "<br>Sin columna Estatus: todo se toma como facturado") : "Sin cargar");
     st($("dHist"), S.hist ? "<b>✓ Cargado:</b> " + esc(S.hist.file) + "<br>" + Object.keys(S.hist.map).length + " artículos · " + ymLbl(S.hist.months[0]) + " a " + ymLbl(S.hist.months[S.hist.months.length - 1]) + " · " + S.hist.vendors.map(esc).join(", ") : "Sin cargar");
     $("pCorte").value = S.params.corte;
   }
@@ -568,13 +578,13 @@
   function exportXlsx() {
     const wb = XLSX.utils.book_new();
     const tab = R.rows.slice().sort((a, b) => ORD[a.X] - ORD[b.X] || a.U - b.U).map((r) => ({
-      "Código": r.A, "Descripción": r.B, "Negocio": r.C, "Línea": r.Dl, "Fcst mes canal": +r.E.toFixed(1), "Vendido MTD": r.F, "% Avance": +r.G.toFixed(4),
+      "Código": r.A, "Descripción": r.B, "Negocio": r.C, "Línea": r.Dl, "Fcst mes canal": +r.E.toFixed(1), "Venta MTD (fact. + cargado)": r.F, "Cargado sin facturar": r.Cg, "% Avance": +r.G.toFixed(4),
       "% Esperado": +r.H.toFixed(4), "Desviación": +r.I.toFixed(4), "Ritmo diario": +r.J.toFixed(2), "Proyección cierre": +r.L.toFixed(1), "Proy vs Fcst": +r.M.toFixed(4),
       "Fcst otros canales": +r.N.toFixed(1), "Stock disponible": r.O, "Por vencer ≤30d": r.P, "Demanda restante": +r.S.toFixed(1), "Faltante": +r.T.toFixed(1),
       "Días cobertura": r.U >= 999 ? "" : +r.U.toFixed(1), "Fecha est. quiebre": /^\d/.test(r.V) ? fmtD(r.V) : r.V, "Quiebre antes LT": r.W, "Estatus": r.X, "Acción sugerida": r.Y, "Acción acordada": S.cm[r.A] || "",
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tab), "Seguimiento");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.vrows.map((v) => ({ "Vendedor": v.vn, "Gerente": v.g, "Forecast": +v.fc.toFixed(1), "Vendido": v.vend, "% Avance": v.av == null ? "" : +v.av.toFixed(4), "% Esperado": +R.esp.toFixed(4), "Proyección": +v.proj.toFixed(1), "Brecha": +v.gap.toFixed(1), "Estatus": v.st }))), "Vendedores");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.vrows.map((v) => ({ "Vendedor": v.vn, "Gerente": v.g, "Forecast": +v.fc.toFixed(1), "Venta (fact. + cargado)": v.vend, "Cargado sin facturar": v.vcar, "% Avance": v.av == null ? "" : +v.av.toFixed(4), "% Esperado": +R.esp.toFixed(4), "Proyección": +v.proj.toFixed(1), "Brecha": +v.gap.toFixed(1), "Estatus": v.st }))), "Vendedores");
     XLSX.writeFile(wb, "Seguimiento_" + R.corte + ".xlsx");
   }
 

@@ -171,7 +171,7 @@ ul.steps li{margin-bottom:6px}
       </div>
       <div class="drop" id="dVend">
         <h3>3 · Vendido del mes</h3>
-        <p>Tabla <i>VENDIDO</i> (Suma de BU por artículo y vendedor), tal cual.</p>
+        <p>Tabla <i>VENDIDO</i> (Suma de BU por artículo y vendedor), tal cual. Si trae la columna <b>Estatus</b> (Facturado / Abierto), lo abierto se suma como cargado sin facturar.</p>
         <input type="file" accept=".xlsx,.xls,.xlsm,.csv">
         <div class="status"></div>
       </div>
@@ -249,7 +249,7 @@ ul.steps li{margin-bottom:6px}
     <div class="card">
       <h2>Cómo calcula</h2>
       <ul class="steps">
-        <li><b>Avance de venta</b> = vendido del mes ('Total general') ÷ Forecast Consensuado del mes del canal elegido (Supermercados por defecto).</li>
+        <li><b>Avance de venta</b> = vendido del mes, facturado + cargado sin facturar ('Total general'), ÷ Forecast Consensuado del mes del canal elegido (Supermercados por defecto). Lo cargado ya está descontado del stock como "Comprometido", así que no se resta otra vez.</li>
         <li>El código del vendido trae el prefijo 901 (90157000237 = 57000237): se toman los últimos 8 dígitos y se suman las filas repetidas.</li>
         <li><b>Avance esperado</b> = días transcurridos ÷ días del mes (hábiles o naturales).</li>
         <li><b>Stock disponible</b> = 'Total Disponible' del reporte (ya neto de comprometido, sin vencido). Los negativos cuentan como 0.</li>
