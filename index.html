@@ -118,7 +118,9 @@ ul.steps li{margin-bottom:6px}
     <div class="card">
       <h2>Detalle por artículo y vendedor</h2>
       <div class="toolbar"><input id="vq" placeholder="Buscar código o descripción" style="min-width:240px">
-        <label class="muted"><input type="checkbox" id="vOnlyLag"> Solo artículos atrasados</label></div>
+        <label class="muted"><input type="checkbox" id="vOnlyLag"> Solo artículos atrasados</label>
+        <span style="margin-left:auto"></span><button class="btn sec" id="btnVendExp">Exportar a Excel (para correcciones)</button></div>
+      <p class="muted" style="margin:0 0 8px">Prom 3M = promedio mensual de venta de cada vendedor en los 3 meses cerrados anteriores, según el historial sell-in. "Fcst vs Prom" en rojo = forecast más de 20% abajo del promedio; en azul = más de 20% arriba.</p>
       <div class="tablewrap"><table id="vdtbl"></table></div>
     </div>
   </section>

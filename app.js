@@ -342,9 +342,10 @@
 
     // Promedio de venta de los últimos 3 meses cerrados (historial sell-in, todos los vendedores)
     const H = S.hist, L3 = [addM(mes, -3), addM(mes, -2), addM(mes, -1)];
-    const prom3 = (A) => {
+    // vn: vendedor del historial (opcional). Sin vn suma todos los vendedores.
+    const prom3 = (A, vn) => {
       const o = H && H.map[A]; if (!o) return null;
-      const q = (ym) => { let t = 0; for (const v in o.by) t += o.by[v][ym] || 0; return t; };
+      const q = (ym) => { let t = 0; for (const v in o.by) if (!vn || v === vn) t += o.by[v][ym] || 0; return t; };
       let first = null; for (const ym of H.months) if (ym < mes && q(ym) > 0) { first = ym; break; }
       const ws = first ? L3.filter((m) => m >= first) : [];
       return ws.length ? ws.reduce((a, m) => a + q(m), 0) / ws.length : 0;
@@ -388,18 +389,23 @@
     // vendedores
     const vendors = (S.vend && S.vend.vendors) || [];
     const gerentes = Object.keys(gerCanal).sort();
+    // Empata el nombre del vendedor del vendido con el "Territorio" del historial
+    const tk = (x) => norm(x).replace(/[^a-z ]/g, " ").split(" ").filter((t) => t.length > 1);
+    const histV = (vn) => { if (!H) return null; if (H.vendors.includes(vn)) return vn; const a = tk(vn); const m = H.vendors.filter((h) => { const b = new Set(tk(h)); return a.length && a.every((t) => b.has(t)); }); return m.length === 1 ? m[0] : null; };
     const vrows = vendors.map((vn) => {
       const g = (vn in S.vmap ? S.vmap[vn] : autoGerente(vn, gerentes) || "").trim();
       let vend = 0, vcar = 0; for (const c in vm) { vend += vm[c].by[vn] || 0; vcar += (vm[c].byC || {})[vn] || 0; }
       const fc = g ? (gerCanal[g] || 0) : 0;
       const av = fc ? vend / fc : null, proj = dtr ? vend / dtr * dm : 0;
       const dev = av == null ? null : av - esp;
-      return { vn, g, fc, vend, vcar, av, dev, proj, pv: fc ? proj / fc : null, gap: Math.max(fc - vend, 0), st: dev == null ? "" : dev < -p.tol ? "ATRASADO" : dev > p.tol ? "ADELANTADO" : "EN LÍNEA" };
+      const hv = histV(vn);
+      let p3 = null; if (hv) { p3 = 0; for (const c in H.map) p3 += prom3(c, hv) || 0; }
+      return { vn, g, hv, p3, fp: p3 ? fc / p3 - 1 : null, fc, vend, vcar, av, dev, proj, pv: fc ? proj / fc : null, gap: Math.max(fc - vend, 0), st: dev == null ? "" : dev < -p.tol ? "ATRASADO" : dev > p.tol ? "ADELANTADO" : "EN LÍNEA" };
     });
     const asignados = new Set(vrows.map((v) => v.g).filter(Boolean));
     const fcSinVend = gerentes.filter((g) => !asignados.has(g)).reduce((a, g) => a + gerCanal[g], 0);
     R = { rows, mes, dm, dtr, dr, esp, corte: p.corte, vrows, gerentes, gerCanal, fcGer, fcSinVend, vendors,
-      hasFcstMonth: !!(S.fcst && S.fcst.months.includes(mes)), hasCar: !!(S.vend && S.vend.hasStatus), L3 };
+      hasFcstMonth: !!(S.fcst && S.fcst.months.includes(mes)), hasCar: !!(S.vend && S.vend.hasStatus), L3, prom3 };
   }
 
   // ---------------- Render ----------------
@@ -496,40 +502,63 @@
     const p = S.params;
     $("venWarn").innerHTML = S.vend ? "" : '<div class="warn">Carga el reporte de <b>Vendido</b> para ver el avance por vendedor. <a href="#" data-go="cargar">Ir a Cargar datos</a></div>';
     const opts = (sel) => '<option value="">— sin asignar —</option>' + R.gerentes.map((g) => "<option" + (g === sel ? " selected" : "") + ' value="' + esc(g) + '">' + esc(g) + "</option>").join("");
-    let h = '<thead><tr><th class="nosort">Vendedor</th><th class="nosort">Gerente en forecast</th><th class="nosort">Forecast mes</th><th class="nosort">Venta MTD (fact. + cargado)</th><th class="nosort">Cargado sin facturar</th><th class="nosort">% Avance vs esperado</th><th class="nosort">Desviación</th><th class="nosort">Proyección cierre</th><th class="nosort">Proy. vs Fcst</th><th class="nosort">Brecha a Fcst</th><th class="nosort">Estatus</th></tr></thead><tbody>';
-    let tf = 0, tv = 0, tc = 0, tp = 0, tg = 0;
+    let h = '<thead><tr><th class="nosort">Vendedor</th><th class="nosort">Gerente en forecast</th><th class="nosort">Forecast mes</th><th class="nosort">Prom venta 3M</th><th class="nosort">Fcst vs Prom 3M</th><th class="nosort">Venta MTD (fact. + cargado)</th><th class="nosort">Cargado sin facturar</th><th class="nosort">% Avance vs esperado</th><th class="nosort">Desviación</th><th class="nosort">Proyección cierre</th><th class="nosort">Proy. vs Fcst</th><th class="nosort">Brecha a Fcst</th><th class="nosort">Estatus</th></tr></thead><tbody>';
+    let tf = 0, tp3 = 0, tv = 0, tc = 0, tp = 0, tg = 0;
+    const fpc = (x) => (x == null ? "" : x < -p.hThr ? "neg" : x > p.hThr ? "pos" : "");
     const pillV = (s) => (s ? '<span class="pill ' + (s === "ATRASADO" ? "CRIT" : s === "ADELANTADO" ? "OVER" : "OK") + '">' + s + "</span>" : "");
     const bar = (av) => av == null ? "" : '<div style="display:flex;gap:8px;align-items:center"><div class="bar"><i style="width:' + Math.min(av, 1.5) / 1.5 * 100 + '%"></i><b style="left:' + R.esp / 1.5 * 100 + '%"></b></div>' + pct(av) + "</div>";
     for (const v of R.vrows) {
-      tf += v.fc; tv += v.vend; tc += v.vcar; tp += v.proj; tg += v.gap;
-      h += "<tr><td><b>" + esc(v.vn) + '</b></td><td><select data-v="' + esc(v.vn) + '">' + opts(v.g) + '</select></td><td class="n">' + n0(v.fc) + '</td><td class="n">' + n0(v.vend) + '</td><td class="n">' + n0(v.vcar) + "</td><td>" + bar(v.av) + '</td><td class="n ' + (v.dev == null ? "" : v.dev < -p.tol ? "neg" : v.dev > p.tol ? "pos" : "") + '">' + (v.dev == null ? "" : sp(v.dev)) + '</td><td class="n">' + n0(v.proj) + '</td><td class="n">' + pct(v.pv) + '</td><td class="n">' + n0(v.gap) + '</td><td class="c">' + pillV(v.st) + "</td></tr>";
+      tf += v.fc; tp3 += v.p3 || 0; tv += v.vend; tc += v.vcar; tp += v.proj; tg += v.gap;
+      h += "<tr><td><b>" + esc(v.vn) + '</b></td><td><select data-v="' + esc(v.vn) + '">' + opts(v.g) + '</select></td><td class="n">' + n0(v.fc) + '</td><td class="n">' + (v.p3 == null ? "s/hist" : n0(v.p3)) + '</td><td class="n ' + fpc(v.fp) + '">' + (v.fp == null ? "" : sp(v.fp)) + '</td><td class="n">' + n0(v.vend) + '</td><td class="n">' + n0(v.vcar) + "</td><td>" + bar(v.av) + '</td><td class="n ' + (v.dev == null ? "" : v.dev < -p.tol ? "neg" : v.dev > p.tol ? "pos" : "") + '">' + (v.dev == null ? "" : sp(v.dev)) + '</td><td class="n">' + n0(v.proj) + '</td><td class="n">' + pct(v.pv) + '</td><td class="n">' + n0(v.gap) + '</td><td class="c">' + pillV(v.st) + "</td></tr>";
     }
     if (R.vrows.length) {
       const av = tf ? tv / tf : null, dev = av == null ? null : av - R.esp;
       const st = dev == null ? "" : dev < -p.tol ? "ATRASADO" : dev > p.tol ? "ADELANTADO" : "EN LÍNEA";
-      h += '<tr style="font-weight:700;background:#eef3fb"><td>Total</td><td></td><td class="n">' + n0(tf) + '</td><td class="n">' + n0(tv) + '</td><td class="n">' + n0(tc) + "</td><td>" + bar(av) + '</td><td class="n">' + (dev == null ? "" : sp(dev)) + '</td><td class="n">' + n0(tp) + '</td><td class="n">' + pct(tf ? tp / tf : null) + '</td><td class="n">' + n0(tg) + '</td><td class="c">' + pillV(st) + "</td></tr>";
-      h += '<tr><td colspan="11" class="muted">Forecast del canal sin vendedor asignado: <b>' + n0(R.fcSinVend) + "</b> cajas (gerentes sin reporte de vendido). La línea negra en la barra marca el avance esperado (" + pct(R.esp) + ").</td></tr>";
+      h += '<tr style="font-weight:700;background:#eef3fb"><td>Total</td><td></td><td class="n">' + n0(tf) + '</td><td class="n">' + (tp3 ? n0(tp3) : "") + '</td><td class="n ' + fpc(tp3 ? tf / tp3 - 1 : null) + '">' + (tp3 ? sp(tf / tp3 - 1) : "") + '</td><td class="n">' + n0(tv) + '</td><td class="n">' + n0(tc) + "</td><td>" + bar(av) + '</td><td class="n">' + (dev == null ? "" : sp(dev)) + '</td><td class="n">' + n0(tp) + '</td><td class="n">' + pct(tf ? tp / tf : null) + '</td><td class="n">' + n0(tg) + '</td><td class="c">' + pillV(st) + "</td></tr>";
+      h += '<tr><td colspan="13" class="muted">Forecast del canal sin vendedor asignado: <b>' + n0(R.fcSinVend) + "</b> cajas (gerentes sin reporte de vendido). La línea negra en la barra marca el avance esperado (" + pct(R.esp) + ").</td></tr>";
     }
     $("vtbl").innerHTML = h + "</tbody>";
     renderVendDetail();
   }
 
-  function renderVendDetail() {
+  function vendDetailRows() {
     const p = S.params, vm = (S.vend && S.vend.map) || {}, q = norm($("vq").value), lag = $("vOnlyLag").checked;
-    const vs = R.vrows;
-    let h = '<thead><tr><th class="sticky" rowspan="2">Código</th><th rowspan="2">Descripción</th><th rowspan="2">Fcst canal</th><th rowspan="2">Vendido</th><th rowspan="2">% Avance</th><th rowspan="2">Estatus inventario</th>' +
-      vs.map((v) => '<th colspan="3" class="nosort">' + esc(v.vn) + "</th>").join("") + "</tr><tr>" + vs.map(() => '<th class="nosort">Fcst</th><th class="nosort">Vendido</th><th class="nosort">% Av.</th>').join("") + "</tr></thead><tbody>";
-    const rows = R.rows.filter((r) => (r.E > 0 || r.F > 0) && (!q || norm(r.A + " " + r.B).includes(q)) && (!lag || (r.E > 0 && r.G < R.esp - p.tol))).sort((a, b) => b.E - a.E);
+    const rows = R.rows.filter((r) => (r.E > 0 || r.F > 0 || r.P3 > 0) && (!q || norm(r.A + " " + r.B).includes(q)) && (!lag || (r.E > 0 && r.G < R.esp - p.tol))).sort((a, b) => b.E - a.E || (b.P3 || 0) - (a.P3 || 0));
+    return rows.map((r) => ({ r, by: R.vrows.map((v) => {
+      const fc = v.g ? R.fcGer[r.A + "|" + v.g] || 0 : 0, vd = vm[r.A] ? vm[r.A].by[v.vn] || 0 : 0;
+      const p3 = v.hv ? R.prom3(r.A, v.hv) : null;
+      return { fc, vd, av: fc ? vd / fc : null, p3, fp: p3 ? fc / p3 - 1 : null };
+    }) }));
+  }
+
+  function renderVendDetail() {
+    const p = S.params, vs = R.vrows;
+    let h = '<thead><tr><th class="sticky" rowspan="2">Código</th><th rowspan="2">Descripción</th><th rowspan="2">Fcst canal</th><th rowspan="2">Prom 3M canal</th><th rowspan="2">Vendido</th><th rowspan="2">% Avance</th><th rowspan="2">Estatus inventario</th>' +
+      vs.map((v) => '<th colspan="5" class="nosort">' + esc(v.vn) + "</th>").join("") + "</tr><tr>" +
+      vs.map(() => '<th class="nosort">Fcst</th><th class="nosort">Prom 3M</th><th class="nosort">Fcst vs Prom</th><th class="nosort">Vendido</th><th class="nosort">% Av.</th>').join("") + "</tr></thead><tbody>";
     const cls = (av) => (av == null ? "" : av < R.esp - p.tol ? "neg" : av > R.esp + p.tol ? "pos" : "");
-    for (const r of rows) {
-      h += '<tr><td class="c sticky">' + r.A + '</td><td class="desc">' + esc(r.B) + '</td><td class="n">' + n0(r.E) + '</td><td class="n">' + n0(r.F) + '</td><td class="n ' + cls(r.E ? r.G : null) + '">' + (r.E ? pct(r.G) : "") + '</td><td class="c"><span class="pill ' + ST[r.X] + '">' + r.X + "</span></td>";
-      for (const v of vs) {
-        const fc = v.g ? R.fcGer[r.A + "|" + v.g] || 0 : 0, vd = vm[r.A] ? vm[r.A].by[v.vn] || 0 : 0, av = fc ? vd / fc : null;
-        h += '<td class="n">' + n0(fc) + '</td><td class="n">' + n0(vd) + '</td><td class="n ' + cls(av) + '">' + (av == null ? "" : pct(av)) + "</td>";
+    const fpc = (x) => (x == null ? "" : x < -p.hThr ? "neg" : x > p.hThr ? "pos" : "");
+    for (const { r, by } of vendDetailRows()) {
+      h += '<tr><td class="c sticky">' + r.A + '</td><td class="desc">' + esc(r.B) + '</td><td class="n">' + n0(r.E) + '</td><td class="n">' + (r.P3 == null ? "s/hist" : n0(r.P3)) + '</td><td class="n">' + n0(r.F) + '</td><td class="n ' + cls(r.E ? r.G : null) + '">' + (r.E ? pct(r.G) : "") + '</td><td class="c"><span class="pill ' + ST[r.X] + '">' + r.X + "</span></td>";
+      for (const x of by) {
+        h += '<td class="n">' + n0(x.fc) + '</td><td class="n">' + (x.p3 == null ? "" : n0(x.p3)) + '</td><td class="n ' + fpc(x.fp) + '">' + (x.fp == null ? (x.fc > 0 && x.p3 === 0 ? "sin venta" : "") : sp(x.fp)) + '</td><td class="n">' + n0(x.vd) + '</td><td class="n ' + cls(x.av) + '">' + (x.av == null ? "" : pct(x.av)) + "</td>";
       }
       h += "</tr>";
     }
     $("vdtbl").innerHTML = h + "</tbody>";
+  }
+
+  function exportVend() {
+    const out = [];
+    for (const { r, by } of vendDetailRows()) R.vrows.forEach((v, i) => {
+      const x = by[i]; if (!x.fc && !x.vd && !x.p3) return;
+      out.push({ "Vendedor": v.vn, "Gerente en forecast": v.g, "Código": r.A, "Descripción": r.B, "Línea": r.Dl, ["Fcst " + R.mes]: +x.fc.toFixed(1),
+        "Prom venta 3M": x.p3 == null ? "" : +x.p3.toFixed(1), "Fcst vs Prom 3M": x.fp == null ? "" : +x.fp.toFixed(4), "Vendido MTD": x.vd, "% Avance": x.av == null ? "" : +x.av.toFixed(4),
+        "% Esperado": +R.esp.toFixed(4), "Estatus inventario": r.X, "Fcst corregido (propuesta)": "", "Comentario": "" });
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), "Detalle vendedores");
+    XLSX.writeFile(wb, "Vendedores_" + R.mes + ".xlsx");
   }
 
   function renderLoad() {
@@ -632,7 +661,7 @@
   $("tbl").addEventListener("click", (e) => { const th = e.target.closest("th[data-k]"); if (!th || th.classList.contains("nosort")) return; const k = th.dataset.k; UI.sort = { k, dir: UI.sort.k === k ? -UI.sort.dir : (["E","F","N","O","P","S","T","L","P3","Cg"].includes(k) ? -1 : 1) }; renderTable(); });
   $("tbl").addEventListener("change", (e) => { const i = e.target.closest("input.cm"); if (!i) return; const v = i.value.trim(); if (v) S.cm[i.dataset.c] = v; else delete S.cm[i.dataset.c]; save(K.cm, S.cm); });
   $("vtbl").addEventListener("change", (e) => { const s = e.target.closest("select[data-v]"); if (!s) return; S.vmap[s.dataset.v] = s.value; save(K.vmap, S.vmap); compute(); renderVend(); });
-  $("vq").addEventListener("input", renderVendDetail); $("vOnlyLag").addEventListener("change", renderVendDetail);
+  $("vq").addEventListener("input", renderVendDetail); $("btnVendExp").addEventListener("click", exportVend); $("vOnlyLag").addEventListener("change", renderVendDetail);
   $("pForm").addEventListener("change", (e) => { const el = e.target.closest("[data-p]"); if (!el) return; const k = el.dataset.p; let v = el.value; if (el.type === "number") v = k === "tol" ? Number(v) / 100 : Number(v); S.params[k] = v; save(K.params, S.params); renderAll(); go("parametros"); });
   $("pFer").addEventListener("change", (e) => { S.params.feriados = e.target.value.split(/\s+/).map((s) => s.trim()).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s)); save(K.params, S.params); renderAll(); go("parametros"); });
   $("btnExport").addEventListener("click", exportXlsx);
