@@ -285,11 +285,11 @@
     $("hSt").innerHTML = ["FCST BAJO", "FCST ALTO", "EN RANGO", "SIN FCST", "SIN VENTA RECIENTE", "SIN HISTORIA"].map((s) => '<div class="kpi st ' + SIGC[s] + (UI.hSig === s ? " sel" : "") + '" data-hs="' + s + '"><div class="l">' + s + '</div><div class="v">' + (cnt[s] || 0) + "</div></div>").join("");
     const C = [["A", "Código"], ["B", "Descripción"], ["sp", "Últimos 12 meses → Fcst"], ["P3", "Prom 3M"], ["P6", "Prom 6M"], ["P12", "Prom 12M"], ["LY", "Mismo mes año ant. (" + ymLbl(RH.ly) + ")"], ["tr", "Tendencia vs año ant."],
       ["sug", "Sugerido"], ["F", "Fcst actual"], ["dev", "Fcst vs sugerido"], ["dif", "Diferencia (cajas)"], ["sig", "Señal"], ["aj", "Fcst ajustado (tu propuesta)"], ["cm", "Comentario"]];
-    let h = "<thead><tr>" + C.map(([kk, l]) => '<th data-hk="' + kk + '" class="' + (kk === "A" ? "sticky " : "") + (["sp", "aj", "cm", "B"].includes(kk) ? "nosort" : "") + '">' + l + (UI.hSort.k === kk ? (UI.hSort.dir > 0 ? " ▲" : " ▼") : "") + "</th>").join("") + "</tr></thead><tbody>";
+    let h = "<thead><tr>" + C.map(([kk, l]) => '<th data-hk="' + kk + '" class="' + (kk === "A" ? "sticky " : kk === "B" ? "sticky2 " : "") + (["sp", "aj", "cm", "B"].includes(kk) ? "nosort" : "") + '">' + l + (UI.hSort.k === kk ? (UI.hSort.dir > 0 ? " ▲" : " ▼") : "") + "</th>").join("") + "</tr></thead><tbody>";
     for (const r of rows) {
       const a = S.adj[adjKey(r.A)] || {};
       const dc = r.dev == null ? "" : r.dev > p.hThr ? "pos" : r.dev < -p.hThr ? "neg" : "";
-      h += '<tr><td class="c sticky">' + r.A + '</td><td class="desc">' + esc(r.B) + "</td><td>" + spark(r.sp, r.F) + '</td><td class="n">' + n0(r.P3) + '</td><td class="n">' + n0(r.P6) + '</td><td class="n">' + n0(r.P12) + '</td><td class="n">' + n0(r.LY) + '</td><td class="n">' + (r.tr == null ? "" : sp(r.tr - 1)) +
+      h += '<tr><td class="c sticky">' + r.A + '</td><td class="desc sticky2">' + esc(r.B) + "</td><td>" + spark(r.sp, r.F) + '</td><td class="n">' + n0(r.P3) + '</td><td class="n">' + n0(r.P6) + '</td><td class="n">' + n0(r.P12) + '</td><td class="n">' + n0(r.LY) + '</td><td class="n">' + (r.tr == null ? "" : sp(r.tr - 1)) +
         '</td><td class="n"><b>' + n0(r.sug) + '</b></td><td class="n">' + n0(r.F) + '</td><td class="n ' + dc + '">' + (r.dev == null ? "" : sp(r.dev)) + '</td><td class="n ' + dc + '">' + (Math.round(r.dif) ? (r.dif > 0 ? "+" : "") + nf0.format(r.dif) : "–") +
         '</td><td class="c"><span class="pill ' + SIGC[r.sig] + '">' + r.sig + '</span></td><td><input type="number" class="aj" data-a="' + r.A + '" value="' + (a.aj != null ? esc(a.aj) : "") + '" placeholder="' + Math.round(r.sug) + '" style="width:90px;text-align:right"></td><td><input class="cm" data-a="' + r.A + '" value="' + esc(a.cm || "") + '" placeholder="Motivo del ajuste…"></td></tr>';
     }
@@ -470,13 +470,14 @@
   function renderTable() {
     const p = S.params;
     const rows = filtered();
-    let h = "<thead><tr>" + COLS.map(([k, l]) => '<th data-k="' + k + '" class="' + (k === "A" ? "sticky " : "") + (k === "Z" ? "nosort" : "") + '">' + l + (UI.sort.k === k ? (UI.sort.dir > 0 ? " ▲" : " ▼") : "") + "</th>").join("") + "</tr></thead><tbody>";
+    let h = "<thead><tr>" + COLS.map(([k, l]) => '<th data-k="' + k + '" class="' + (k === "A" ? "sticky " : k === "B" ? "sticky2 " : "") + (k === "Z" ? "nosort" : "") + '">' + l + (UI.sort.k === k ? (UI.sort.dir > 0 ? " ▲" : " ▼") : "") + "</th>").join("") + "</tr></thead><tbody>";
     for (const r of rows) {
       h += "<tr>";
       for (const [k, , cls, f] of COLS) {
         if (k === "Z") { h += '<td><input class="cm" data-c="' + r.A + '" value="' + esc(S.cm[r.A] || "") + '" placeholder="Anotar…"></td>'; continue; }
         let v = r[k], c = cls || "", out = f ? f(v) : esc(v);
         if (k === "A") c += " sticky";
+        if (k === "B") c += " sticky2";
         if (k === "X") out = '<span class="pill ' + ST[v] + '">' + v + "</span>";
         if (k === "I" && r.E > 0) c += v < -p.tol ? " pos" : v > p.tol ? " neg" : "";
         if (k === "U" && v <= p.crit) c += " cov-crit"; else if (k === "U" && v <= p.alerta) c += " cov-alert";
@@ -533,13 +534,13 @@
 
   function renderVendDetail() {
     const p = S.params, vs = R.vrows;
-    let h = '<thead><tr><th class="sticky" rowspan="2">Código</th><th rowspan="2">Descripción</th><th rowspan="2">Fcst canal</th><th rowspan="2">Prom 3M canal</th><th rowspan="2">Vendido</th><th rowspan="2">% Avance</th><th rowspan="2">Estatus inventario</th>' +
+    let h = '<thead><tr><th class="sticky" rowspan="2">Código</th><th class="sticky2" rowspan="2">Descripción</th><th rowspan="2">Fcst canal</th><th rowspan="2">Prom 3M canal</th><th rowspan="2">Vendido</th><th rowspan="2">% Avance</th><th rowspan="2">Estatus inventario</th>' +
       vs.map((v) => '<th colspan="5" class="nosort">' + esc(v.vn) + "</th>").join("") + "</tr><tr>" +
       vs.map(() => '<th class="nosort">Fcst</th><th class="nosort">Prom 3M</th><th class="nosort">Fcst vs Prom</th><th class="nosort">Vendido</th><th class="nosort">% Av.</th>').join("") + "</tr></thead><tbody>";
     const cls = (av) => (av == null ? "" : av < R.esp - p.tol ? "neg" : av > R.esp + p.tol ? "pos" : "");
     const fpc = (x) => (x == null ? "" : x < -p.hThr ? "neg" : x > p.hThr ? "pos" : "");
     for (const { r, by } of vendDetailRows()) {
-      h += '<tr><td class="c sticky">' + r.A + '</td><td class="desc">' + esc(r.B) + '</td><td class="n">' + n0(r.E) + '</td><td class="n">' + (r.P3 == null ? "s/hist" : n0(r.P3)) + '</td><td class="n">' + n0(r.F) + '</td><td class="n ' + cls(r.E ? r.G : null) + '">' + (r.E ? pct(r.G) : "") + '</td><td class="c"><span class="pill ' + ST[r.X] + '">' + r.X + "</span></td>";
+      h += '<tr><td class="c sticky">' + r.A + '</td><td class="desc sticky2">' + esc(r.B) + '</td><td class="n">' + n0(r.E) + '</td><td class="n">' + (r.P3 == null ? "s/hist" : n0(r.P3)) + '</td><td class="n">' + n0(r.F) + '</td><td class="n ' + cls(r.E ? r.G : null) + '">' + (r.E ? pct(r.G) : "") + '</td><td class="c"><span class="pill ' + ST[r.X] + '">' + r.X + "</span></td>";
       for (const x of by) {
         h += '<td class="n">' + n0(x.fc) + '</td><td class="n">' + (x.p3 == null ? "" : n0(x.p3)) + '</td><td class="n ' + fpc(x.fp) + '">' + (x.fp == null ? (x.fc > 0 && x.p3 === 0 ? "sin venta" : "") : sp(x.fp)) + '</td><td class="n">' + n0(x.vd) + '</td><td class="n ' + cls(x.av) + '">' + (x.av == null ? "" : pct(x.av)) + "</td>";
       }

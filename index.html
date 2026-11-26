@@ -40,12 +40,17 @@ button.btn.sec{background:#fff;color:var(--brand)} button.btn.danger{background:
 button.btn:disabled{opacity:.5;cursor:default}
 .tablewrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:6px;background:#fff}
 table{border-collapse:collapse;width:100%;font-size:12.5px}
-th{position:sticky;top:0;background:var(--brand);color:#fff;font-weight:600;padding:8px 6px;text-align:center;vertical-align:bottom;z-index:2;cursor:pointer;user-select:none;min-width:70px}
+thead{position:sticky;top:0;z-index:4}
+th{background:var(--brand);color:#fff;font-weight:600;padding:8px 6px;text-align:center;vertical-align:bottom;z-index:2;cursor:pointer;user-select:none;min-width:70px}
 th.nosort{cursor:default}
 td{padding:5px 6px;border-bottom:1px solid #edf0f4;white-space:nowrap;font-variant-numeric:tabular-nums}
 td.n{text-align:right} td.c{text-align:center} td.desc{white-space:normal;min-width:200px}
 tr:hover td{background:#f7f9fc}
-td.sticky,th.sticky{position:sticky;left:0;z-index:1;background:#fff} th.sticky{z-index:3;background:var(--brand)}
+td.sticky,th.sticky,td.sticky2,th.sticky2{position:sticky;z-index:1;background:#fff}
+td.sticky,th.sticky{left:0;width:92px;min-width:92px;max-width:92px}
+td.sticky2,th.sticky2{left:92px;min-width:220px;max-width:260px;white-space:normal;box-shadow:2px 0 0 var(--line)}
+th.sticky,th.sticky2{z-index:3;background:var(--brand)}
+tr:hover td.sticky,tr:hover td.sticky2{background:#f7f9fc}
 .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11.5px;font-weight:700}
 .CRIT .pill,.pill.CRIT{background:var(--crit-bg);color:var(--crit)} .pill.ALERT{background:var(--alert-bg);color:var(--alert)}
 .pill.OVER{background:var(--over-bg);color:var(--over)} .pill.OK{background:var(--ok-bg);color:var(--ok)} .pill.NONE{background:var(--none-bg);color:var(--none)}
@@ -269,6 +274,6 @@ ul.steps li{margin-bottom:6px}
   </section>
 </main>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="app.js?v=20261126b"></script>
+<script src="app.js?v=20261126c"></script>
 </body>
 </html>
