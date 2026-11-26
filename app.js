@@ -176,7 +176,8 @@
         let dc = nh.findIndex((x) => x.includes("descripcion"));
         if (ac < 0) { for (let r = h + 1; r < Math.min(rows.length, h + 30) && ac < 0; r++) ac = (rows[r] || []).findIndex((v, i) => i < cols[0].c && isCode(v)); }
         if (ac < 0) throw new Error("No encontré la columna de artículo.");
-        if (dc < 0) dc = ac + 1;
+        if (dc < 0 && !cols.some((k) => k.c === ac + 1) && ac + 1 !== vc) dc = ac + 1;
+        const dsc = (x) => (dc >= 0 ? String(x[dc] == null ? "" : x[dc]).trim() : "");
         const map = {}, vset = new Set();
         let lastC = null, lastV = null;
         for (let r = h + 1; r < rows.length; r++) {
@@ -185,11 +186,11 @@
           const raw = x[ac], txt = norm(raw); let c;
           if (isCode(raw)) { c = parseInt(String(raw).trim().slice(-8), 10); lastC = c; }
           else if (txt.includes("total")) { lastC = null; continue; }
-          else if (txt === "" && lastC != null && String(x[dc] || "").trim() && !norm(x[dc]).includes("total")) c = lastC;
+          else if (txt === "" && lastC != null && (dc >= 0 ? dsc(x) && !norm(dsc(x)).includes("total") : cols.some((k) => x[k.c] != null))) c = lastC;
           else continue;
           const v = vc >= 0 ? lastV : "Total"; if (!v) continue;
           vset.add(v);
-          const o = map[c] || (map[c] = { d: String(x[dc] || "").trim(), by: {} });
+          const o = map[c] || (map[c] = { d: dsc(x), by: {} }); if (!o.d) o.d = dsc(x);
           const bv = o.by[v] || (o.by[v] = {});
           for (const col of cols) { const q = num(x[col.c]); if (q) bv[col.ym] = (bv[col.ym] || 0) + q; }
         }
