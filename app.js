@@ -356,9 +356,9 @@
       const st = sm[A], vd = vm[A];
       const B = (st && st.d) || inf.d || (vd && vd.d) || "Sin descripción";
       const E = fcC[A] || 0, Fv = vd ? vd.tot : 0, Cg = vd ? vd.car || 0 : 0;
-      const G = E ? Fv / E : 0, H = esp, I = G - H;
+      const G = E ? Fv / E : null, H = esp, I = E ? G - H : null; // sin forecast no hay avance ni desviación
       const J = dtr ? Fv / dtr : 0, Kd = dm ? E / dm : 0;
-      const L = Fv + J * dr, M = E ? L / E : 0;
+      const L = Fv + J * dr, M = E ? L / E : null;
       const N = p.canal === "Todos" ? 0 : (fcO[A] || 0);
       const O = Math.max(st ? st.disp : 0, 0), Pv = st ? st.v30 : 0;
       const Rp = Math.max(E - Fv, 0);
@@ -460,6 +460,7 @@
     rows.sort((a, b) => {
       let x = a[k], y = b[k];
       if (k === "X") { x = ORD[x]; y = ORD[y]; }
+      if (x == null) x = -Infinity; if (y == null) y = -Infinity;
       if (k === "V") { x = /^\d/.test(x) ? x : "9" + x; y = /^\d/.test(y) ? y : "9" + y; }
       if (k === "U") { const o = ORD[a.X] - ORD[b.X]; if (o) return o; if (x === y) return b.T - a.T; }
       return (x > y ? 1 : x < y ? -1 : 0) * dir;
@@ -620,8 +621,8 @@
   function exportXlsx() {
     const wb = XLSX.utils.book_new();
     const tab = R.rows.slice().sort((a, b) => ORD[a.X] - ORD[b.X] || a.U - b.U).map((r) => ({
-      "Código": r.A, "Descripción": r.B, "Negocio": r.C, "Línea": r.Dl, "Fcst mes canal": +r.E.toFixed(1), "Prom venta 3M": r.P3 == null ? "" : +r.P3.toFixed(1), "Fcst vs Prom 3M": r.FP == null ? "" : +r.FP.toFixed(4), "Venta MTD (fact. + cargado)": r.F, "Cargado sin facturar": r.Cg, "% Avance": +r.G.toFixed(4),
-      "% Esperado": +r.H.toFixed(4), "Desviación": +r.I.toFixed(4), "Ritmo diario": +r.J.toFixed(2), "Proyección cierre": +r.L.toFixed(1), "Proy vs Fcst": +r.M.toFixed(4),
+      "Código": r.A, "Descripción": r.B, "Negocio": r.C, "Línea": r.Dl, "Fcst mes canal": +r.E.toFixed(1), "Prom venta 3M": r.P3 == null ? "" : +r.P3.toFixed(1), "Fcst vs Prom 3M": r.FP == null ? "" : +r.FP.toFixed(4), "Venta MTD (fact. + cargado)": r.F, "Cargado sin facturar": r.Cg, "% Avance": r.G == null ? "" : +r.G.toFixed(4),
+      "% Esperado": +r.H.toFixed(4), "Desviación": r.I == null ? "" : +r.I.toFixed(4), "Ritmo diario": +r.J.toFixed(2), "Proyección cierre": +r.L.toFixed(1), "Proy vs Fcst": r.M == null ? "" : +r.M.toFixed(4),
       "Fcst otros canales": +r.N.toFixed(1), "Stock disponible": r.O, "Por vencer ≤30d": r.P, "Demanda restante": +r.S.toFixed(1), "Faltante": +r.T.toFixed(1),
       "Días cobertura": r.U >= 999 ? "" : +r.U.toFixed(1), "Fecha est. quiebre": /^\d/.test(r.V) ? fmtD(r.V) : r.V, "Quiebre antes LT": r.W, "Estatus": r.X, "Acción sugerida": r.Y, "Acción acordada": S.cm[r.A] || "",
     }));
